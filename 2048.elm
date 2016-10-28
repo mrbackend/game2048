@@ -6,7 +6,6 @@ import Html.App as App
 import Maybe exposing (Maybe)
 import Platform.Cmd as Cmd
 import Platform.Sub as Sub
-import Return exposing (Return, return)
 
 
 type alias Board =
@@ -19,8 +18,8 @@ type alias Model =
     }
 
 
-type alias Msg =
-    Int
+type Msg
+    = AddCells (List ( Int, Int ))
 
 
 emptyBoard : Board
@@ -35,19 +34,21 @@ initModel =
     }
 
 
-init : Return Msg Model
+init : ( Model, Cmd Msg )
 init =
-    return initModel Cmd.none
+    ( initModel, addInitialTwoCmd )
 
 
 addInitialTwoCmd : Cmd Msg
 addInitialTwoCmd =
-    Random.generate
+    Cmd.none
 
 
-update : Msg -> Model -> Return Msg Model
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    return model addInitialTwoCmd
+    case msg of
+        AddCells newCells ->
+            ( model, Cmd.none )
 
 
 subscriptions : Model -> Sub Msg
