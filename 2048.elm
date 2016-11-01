@@ -9,6 +9,7 @@ import Platform.Cmd as Cmd
 import Platform.Sub as Sub
 import Random exposing (Generator, generate, int, list, map2, pair)
 import Random.Extra as XRandom exposing (constant, frequency)
+import Random.Array as ArrRandom exposing (choose)
 
 
 type alias Model =
@@ -65,39 +66,39 @@ initModel =
 
 addInitialTwoCmd : Cmd Msg
 addInitialTwoCmd =
-    Random.generate AddPieces (newPiecesGen 2 emptyBoard)
+    Random.generate AddPieces initialTwoPiecesGen
 
 
-
--- TODO
-
-
-newPiecesGen : Int -> Board -> Generator (List NewPiece)
-newPiecesGen numPieces board =
+initialTwoPiecesGen : Generator (List NewPiece)
+initialTwoPiecesGen =
     let
         indexesGen : Generator (List Index)
         indexesGen =
-            listChooseNGen numPieces (emptyIndexes board)
+            chooseTwoGen (emptyIndexes emptyBoard)
 
         valuesGen : Generator (List Value)
         valuesGen =
-            Random.list numPieces valueGen
+            Random.list 2 valueGen
     in
         Random.map2 XList.zip indexesGen valuesGen
 
 
+chooseTwoGen : List a -> Generator (List a)
+chooseTwoGen list =
+    let
+        arr =
+            Array.fromList list
 
--- TODO
+        x =
+            ArrRandom.choose arr
 
+        y =
+            ArrRandom.choose (snd x)
 
-listChooseNGen : Int -> List a -> Generator (List a)
-listChooseNGen numPieces values =
-    Random.map Array.toList (arrChooseNGen numPieces (Array.fromList values))
-
-
-arrChooseNGen : Int -> Array a -> Generator (Array a)
-arrChooseNGen numPieces values =
-    Debug.crash ""
+        z =
+            List.filterMap identity [ fst x, fst y ]
+    in
+        XRandom.constant z
 
 
 
