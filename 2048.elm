@@ -3,13 +3,11 @@ module Main exposing (main)
 import Array exposing (Array)
 import Html exposing (Html)
 import Html.App as App
-import List.Extra as XList
-import Maybe exposing (Maybe)
+import List.Extra as List
 import Platform.Cmd as Cmd
 import Platform.Sub as Sub
-import Random exposing (Generator, generate, int, list, map2, pair)
-import Random.Extra as XRandom exposing (constant, frequency)
-import Random.Array as ArrRandom exposing (choose)
+import Random exposing (Generator)
+import Random.Extra as Random
 
 
 type alias Model =
@@ -66,57 +64,45 @@ initModel =
 
 addInitialTwoCmd : Cmd Msg
 addInitialTwoCmd =
-    Random.generate AddPieces initialTwoPiecesGen
+    Random.generate AddPieces (newPiecesGen 2 emptyBoard)
 
 
-initialTwoPiecesGen : Generator (List NewPiece)
-initialTwoPiecesGen =
+newPiecesGen : Int -> Board -> Generator (List NewPiece)
+newPiecesGen numPieces board =
     let
-        indexesGen : Generator (List Index)
+        indexes =
+            emptyIndexes board
+
         indexesGen =
-            chooseTwoGen (emptyIndexes emptyBoard)
+            chooseN numPieces indexes
 
-        valuesGen : Generator (List Value)
         valuesGen =
-            Random.list 2 valueGen
+            Random.list (List.length indexes) valueGen
     in
-        Random.map2 XList.zip indexesGen valuesGen
+        Random.map2 List.zip indexesGen valuesGen
 
 
-chooseTwoGen : List a -> Generator (List a)
-chooseTwoGen list =
-    let
-        arr =
-            Array.fromList list
-
-        x =
-            ArrRandom.choose arr
-
-        y =
-            ArrRandom.choose (snd x)
-
-        z =
-            List.filterMap identity [ fst x, fst y ]
-    in
-        XRandom.constant z
+chooseN : Int -> List a -> Generator (List a)
+chooseN num list =
+    Random.map Array.toList (arrChooseN num (Array.fromList list))
 
 
-
--- TODO
+arrChooseN : Int -> Array a -> Generator (Array a)
+arrChooseN num arr =
+    if num > 0 then
+        Debug.crash ""
+    else
+        Random.constant Array.empty
 
 
 valueGen : Random.Generator Value
 valueGen =
-    XRandom.frequency [ ( 9.0, XRandom.constant 2 ), ( 1.0, XRandom.constant 4 ) ]
-
-
-
--- TODO
+    Random.frequency [ ( 9.0, Random.constant 2 ), ( 1.0, Random.constant 4 ) ]
 
 
 emptyIndexes : Board -> List Index
 emptyIndexes board =
-    []
+    Debug.crash ""
 
 
 emptyBoard : Board
@@ -148,28 +134,16 @@ withBoard model newBoard =
     { model | board = newBoard }
 
 
-
--- TODO
-
-
 withPieces : Board -> List NewPiece -> Board
 withPieces board newPieces =
-    board
-
-
-
--- TODO
+    Debug.crash ""
 
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    Sub.none
-
-
-
--- TODO
+    Debug.crash ""
 
 
 view : Model -> Html Msg
 view model =
-    Html.div [] []
+    Debug.crash ""
