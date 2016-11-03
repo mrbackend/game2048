@@ -87,6 +87,20 @@ chooseN num list =
     Random.map Array.toList (arrChooseN num (Array.fromList list))
 
 
+
+{-
+   g0 : Generator (List a, Array a)
+
+   f1 : (List a, Array a) -> Generator (List a, Array a)
+
+   g2 : Generator (List a, Array a)
+
+   f3 : (List a, Array a) -> Generator (List a, Array a)
+
+   g3 : Generator (List a, Array a)
+-}
+
+
 arrChooseN : Int -> Array a -> Generator (Array a)
 arrChooseN num arr =
     if num > 0 then
