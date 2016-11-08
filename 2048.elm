@@ -44,6 +44,7 @@ import Html.App exposing (program)
 import Html.Attributes as Attributes
 import Keyboard
 import List.Extra as List
+import Maybe.Extra as Maybe
 import Platform.Cmd as Cmd
 import Platform.Sub as Sub
 import Random exposing (Generator)
@@ -95,11 +96,6 @@ main =
         , subscriptions = subscriptions
         , view = view
         }
-
-
-init : ( Model, Cmd Msg )
-init =
-    ( initModel, addInitialTwoCmd )
 
 
 initModel : Model
@@ -193,16 +189,6 @@ emptyBoard =
     Array.repeat 16 Nothing
 
 
-update : Msg -> Model -> ( Model, Cmd Msg )
-update msg model =
-    case msg of
-        AddTiles newTiles ->
-            doAddTiles model newTiles
-
-        KeyDown keyCode ->
-            doKeyDown model keyCode
-
-
 doAddTiles : Model -> List Tile -> ( Model, Cmd Msg )
 doAddTiles model newTiles =
     let
@@ -210,7 +196,7 @@ doAddTiles model newTiles =
             withTiles model.board newTiles
 
         newModel =
-            withBoard model newBoard
+            { model | board = newBoard }
     in
         ( newModel, Cmd.none )
 
@@ -231,7 +217,7 @@ doKeyDown model keyCode =
                 model
 
         nextCmd =
-            if nextModel.board /= model.board then
+            if nextModel /= model then
                 addNextOneCmd model.board
             else
                 Cmd.none
@@ -242,27 +228,62 @@ doKeyDown model keyCode =
 slideLeft : Model -> Model
 slideLeft model =
     let
-        x = Array.map slideRowLeft (groupArr 4 model.board)
+        slideRes =
+            Array.map slideRowLeft (groupArr 4 model.board)
+
+        newBoard =
+            concatArr (Array.map fst slideRes)
+
+        deltaScore =
+            Array.foldl (+) 0 (Array.map snd slideRes)
     in
-        Debug.crash ""
+        { board = newBoard, score = model.score + deltaScore }
+
+
+slideRowLeft : Array a -> ( Array a, Score )
+slideRowLeft row =
+    Debug.crash ""
 
 
 slideUp : Model -> Model
-slideUp model =
-    Debug.crash ""
+slideUp =
+    slideTransformed (Array.fromList [ 0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15 ])
 
 
 slideRight : Model -> Model
-slideRight model =
-    Debug.crash ""
+slideRight =
+    slideTransformed (Array.fromList [ 3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12 ])
 
 
 slideDown : Model -> Model
-slideDown model =
-    Debug.crash ""
+slideDown =
+    slideTransformed (Array.fromList [ 15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0 ])
 
-slideRowLeft : Array a -> (Array a, Int)
-slideRowLeft row = Debug.crash ""
+
+slideTransformed : Array Index -> Model -> Model
+slideTransformed trans model =
+    let
+        transformedModel =
+            slideLeft { model | board = transform trans model.board }
+    in
+        { transformedModel | board = transform trans transformedModel.board }
+
+
+transform : Array Index -> Board -> Board
+transform trans board =
+    Array.indexedMap (getTransformedValue trans board) board
+
+
+getTransformedValue : Array Index -> Board -> Index -> Maybe Value -> Maybe Value
+getTransformedValue trans board index _ =
+    Maybe.join
+        (case Array.get index trans of
+            Just newIndex ->
+                Array.get newIndex board
+
+            Nothing ->
+                Nothing
+        )
 
 
 groupArr : Int -> Array a -> Array (Array a)
@@ -278,12 +299,8 @@ groupArr groupSize arr =
 
 
 concatArr : Array (Array a) -> Array a
-concatArr arr = Debug.crash ""
-
-
-withBoard : Model -> Board -> Model
-withBoard model newBoard =
-    { model | board = newBoard }
+concatArr =
+    Array.foldl Array.append Array.empty
 
 
 withTiles : Board -> List Tile -> Board
@@ -294,6 +311,33 @@ withTiles board newTiles =
 
         [] ->
             board
+
+
+
+-- INIT
+
+
+init : ( Model, Cmd Msg )
+init =
+    ( initModel, addInitialTwoCmd )
+
+
+
+-- UPDATE
+
+
+update : Msg -> Model -> ( Model, Cmd Msg )
+update msg model =
+    case msg of
+        AddTiles newTiles ->
+            doAddTiles model newTiles
+
+        KeyDown keyCode ->
+            doKeyDown model keyCode
+
+
+
+-- SUBSCRIPTIONS
 
 
 subscriptions : Model -> Sub Msg
