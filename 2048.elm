@@ -1,6 +1,7 @@
 module Main exposing (main)
 
 import Array exposing (Array)
+import Array.Extra as Array
 import Css
     exposing
         ( Mixin
@@ -51,6 +52,7 @@ import Random exposing (Generator)
 import Random.Array as Random
 import Random.Extra as Random
 import Tuple2
+import Tuple3
 
 
 type alias Model =
@@ -98,6 +100,11 @@ main =
         }
 
 
+init : ( Model, Cmd Msg )
+init =
+    ( initModel, addInitialTwoCmd )
+
+
 initModel : Model
 initModel =
     { board = emptyBoard
@@ -108,6 +115,178 @@ initModel =
 addInitialTwoCmd : Cmd Msg
 addInitialTwoCmd =
     Random.generate AddTiles (newTilesGen 2 emptyBoard)
+
+
+emptyBoard : Board
+emptyBoard =
+    Array.repeat 16 Nothing
+
+
+update : Msg -> Model -> ( Model, Cmd Msg )
+update msg model =
+    case msg of
+        AddTiles newTiles ->
+            doAddTiles model newTiles
+
+        KeyDown keyCode ->
+            doKeyDown model keyCode
+
+
+doAddTiles : Model -> List Tile -> ( Model, Cmd Msg )
+doAddTiles model newTiles =
+    let
+        newBoard =
+            withTiles model.board newTiles
+
+        newModel =
+            { model | board = newBoard }
+    in
+        ( newModel, Cmd.none )
+
+
+withTiles : Board -> List Tile -> Board
+withTiles board newTiles =
+    case newTiles of
+        head :: tail ->
+            withTiles (Array.set (fst head) (Just (snd head)) board) tail
+
+        [] ->
+            board
+
+
+doKeyDown : Model -> KeyCode -> ( Model, Cmd Msg )
+doKeyDown model keyCode =
+    let
+        nextModel =
+            if keyCode == 37 then
+                slideLeft model
+            else if keyCode == 38 then
+                slideUp model
+            else if keyCode == 39 then
+                slideRight model
+            else if keyCode == 40 then
+                slideDown model
+            else
+                model
+
+        nextCmd =
+            if nextModel /= model then
+                addNextOneCmd nextModel.board
+            else
+                Cmd.none
+    in
+        ( nextModel, nextCmd )
+
+
+slideUp : Model -> Model
+slideUp =
+    slideTransformed (Array.fromList [ 0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15 ])
+
+
+slideRight : Model -> Model
+slideRight =
+    slideTransformed (Array.fromList [ 3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12 ])
+
+
+slideDown : Model -> Model
+slideDown =
+    slideTransformed (Array.fromList [ 15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0 ])
+
+
+slideTransformed : Array Index -> Model -> Model
+slideTransformed trans model =
+    let
+        transformedModel =
+            slideLeft { model | board = transform trans model.board }
+    in
+        { transformedModel | board = transform trans transformedModel.board }
+
+
+slideLeft : Model -> Model
+slideLeft model =
+    let
+        slideRes =
+            Array.map slideRowLeft (groupArr 4 model.board)
+
+        newBoard =
+            concatArr (Array.map fst slideRes)
+
+        deltaScore =
+            Array.foldl (+) 0 (Array.map snd slideRes)
+    in
+        { board = newBoard, score = model.score + deltaScore }
+
+
+slideRowLeft : Array (Maybe Value) -> ( Array (Maybe Value), Score )
+slideRowLeft row =
+    let
+        acc =
+            Array.foldl reduceRow ( Array.empty, 0, Nothing ) row
+
+        newRow =
+            Array.resizelRepeat 4 Nothing (Tuple3.fst acc)
+
+        deltaScore =
+            Tuple3.snd acc
+    in
+        ( newRow, deltaScore )
+
+
+reduceRow : Maybe Value -> ( Array (Maybe Value), Score, Maybe Value ) -> ( Array (Maybe Value), Score, Maybe Value )
+reduceRow value acc =
+    let
+        row =
+            Tuple3.fst acc
+
+        deltaScore =
+            Tuple3.snd acc
+
+        prevValue =
+            Tuple3.trd acc
+    in
+        case value of
+            Just v ->
+                if value == prevValue then
+                    ( Array.set ((Array.length row) - 1) (Just (2 * v)) row, deltaScore + 2 * v, Nothing )
+                else
+                    ( Array.push value row, deltaScore, value )
+
+            Nothing ->
+                ( row, deltaScore, prevValue )
+
+
+groupArr : Int -> Array a -> Array (Array a)
+groupArr groupSize arr =
+    let
+        numGroups =
+            ((Array.length arr) + (groupSize - 1)) // groupSize
+
+        group groupNo =
+            Array.slice (groupNo * groupSize) ((groupNo + 1) * groupSize) arr
+    in
+        Array.map group (Array.fromList [0..(numGroups - 1)])
+
+
+concatArr : Array (Array a) -> Array a
+concatArr =
+    Array.foldr Array.append Array.empty
+
+
+transform : Array Index -> Board -> Board
+transform trans board =
+    Array.indexedMap (getTransformedValue trans board) board
+
+
+getTransformedValue : Array Index -> Board -> Index -> Maybe Value -> Maybe Value
+getTransformedValue trans board index _ =
+    Maybe.join
+        (case Array.get index trans of
+            Just newIndex ->
+                Array.get newIndex board
+
+            Nothing ->
+                Nothing
+        )
 
 
 addNextOneCmd : Board -> Cmd Msg
@@ -128,6 +307,11 @@ newTilesGen numTiles board =
             Random.list (List.length indexes) valueGen
     in
         Random.map2 List.zip indexesGen valuesGen
+
+
+emptyIndexes : Board -> List Index
+emptyIndexes board =
+    List.map fst (List.filter (((==) Nothing) << snd) (Array.toIndexedList board))
 
 
 chooseNGen : Int -> List a -> Generator (List a)
@@ -164,189 +348,9 @@ valueGen =
     Random.frequency [ ( 9.0, Random.constant 2 ), ( 1.0, Random.constant 4 ) ]
 
 
-emptyIndexes : Board -> List Index
-emptyIndexes board =
-    List.map fst (List.filter (((==) Nothing) << snd) (Array.toIndexedList board))
-
-
-tiles : Board -> List Tile
-tiles board =
-    List.filterMap sequenceSnd (Array.toIndexedList board)
-
-
-sequenceSnd : ( a, Maybe b ) -> Maybe ( a, b )
-sequenceSnd tup =
-    case snd tup of
-        Just b ->
-            Just ( fst tup, b )
-
-        Nothing ->
-            Nothing
-
-
-emptyBoard : Board
-emptyBoard =
-    Array.repeat 16 Nothing
-
-
-doAddTiles : Model -> List Tile -> ( Model, Cmd Msg )
-doAddTiles model newTiles =
-    let
-        newBoard =
-            withTiles model.board newTiles
-
-        newModel =
-            { model | board = newBoard }
-    in
-        ( newModel, Cmd.none )
-
-
-doKeyDown : Model -> KeyCode -> ( Model, Cmd Msg )
-doKeyDown model keyCode =
-    let
-        nextModel =
-            if keyCode == 37 then
-                slideLeft model
-            else if keyCode == 38 then
-                slideUp model
-            else if keyCode == 39 then
-                slideRight model
-            else if keyCode == 40 then
-                slideDown model
-            else
-                model
-
-        nextCmd =
-            if nextModel /= model then
-                addNextOneCmd model.board
-            else
-                Cmd.none
-    in
-        ( nextModel, nextCmd )
-
-
-slideLeft : Model -> Model
-slideLeft model =
-    let
-        slideRes =
-            Array.map slideRowLeft (groupArr 4 model.board)
-
-        newBoard =
-            concatArr (Array.map fst slideRes)
-
-        deltaScore =
-            Array.foldl (+) 0 (Array.map snd slideRes)
-    in
-        { board = newBoard, score = model.score + deltaScore }
-
-
-slideRowLeft : Array a -> ( Array a, Score )
-slideRowLeft row =
-    Debug.crash ""
-
-
-slideUp : Model -> Model
-slideUp =
-    slideTransformed (Array.fromList [ 0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15 ])
-
-
-slideRight : Model -> Model
-slideRight =
-    slideTransformed (Array.fromList [ 3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12 ])
-
-
-slideDown : Model -> Model
-slideDown =
-    slideTransformed (Array.fromList [ 15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0 ])
-
-
-slideTransformed : Array Index -> Model -> Model
-slideTransformed trans model =
-    let
-        transformedModel =
-            slideLeft { model | board = transform trans model.board }
-    in
-        { transformedModel | board = transform trans transformedModel.board }
-
-
-transform : Array Index -> Board -> Board
-transform trans board =
-    Array.indexedMap (getTransformedValue trans board) board
-
-
-getTransformedValue : Array Index -> Board -> Index -> Maybe Value -> Maybe Value
-getTransformedValue trans board index _ =
-    Maybe.join
-        (case Array.get index trans of
-            Just newIndex ->
-                Array.get newIndex board
-
-            Nothing ->
-                Nothing
-        )
-
-
-groupArr : Int -> Array a -> Array (Array a)
-groupArr groupSize arr =
-    let
-        numGroups =
-            ((Array.length arr) + (groupSize - 1)) // groupSize
-
-        group groupNo =
-            Array.slice (groupNo * groupSize) ((groupNo + 1) * groupSize) arr
-    in
-        Array.map group (Array.fromList [0..(numGroups - 1)])
-
-
-concatArr : Array (Array a) -> Array a
-concatArr =
-    Array.foldl Array.append Array.empty
-
-
-withTiles : Board -> List Tile -> Board
-withTiles board newTiles =
-    case newTiles of
-        head :: tail ->
-            withTiles (Array.set (fst head) (Just (snd head)) board) tail
-
-        [] ->
-            board
-
-
-
--- INIT
-
-
-init : ( Model, Cmd Msg )
-init =
-    ( initModel, addInitialTwoCmd )
-
-
-
--- UPDATE
-
-
-update : Msg -> Model -> ( Model, Cmd Msg )
-update msg model =
-    case msg of
-        AddTiles newTiles ->
-            doAddTiles model newTiles
-
-        KeyDown keyCode ->
-            doKeyDown model keyCode
-
-
-
--- SUBSCRIPTIONS
-
-
 subscriptions : Model -> Sub Msg
 subscriptions =
     \_ -> Keyboard.downs KeyDown
-
-
-
--- VIEW
 
 
 view : Model -> Html Msg
@@ -360,6 +364,11 @@ view model =
         [ headingView model.score
         , gameContainerView model.board
         ]
+
+
+styles : List Mixin -> Attribute a
+styles =
+    Attributes.style << Css.asPairs
 
 
 headingView : Score -> Html Msg
@@ -497,6 +506,15 @@ tileMixin value =
     Maybe.withDefault tileSuperMixin (Dict.get value tileMixins)
 
 
+tileSuperMixin : Mixin
+tileSuperMixin =
+    mixin
+        [ backgroundColor (rgb 60 58 50)
+        , color (rgb 249 246 242)
+        , fontSize (px 30)
+        ]
+
+
 tileMixins : Dict Value Mixin
 tileMixins =
     Dict.fromList
@@ -580,15 +598,16 @@ tileMixins =
         ]
 
 
-tileSuperMixin : Mixin
-tileSuperMixin =
-    mixin
-        [ backgroundColor (rgb 60 58 50)
-        , color (rgb 249 246 242)
-        , fontSize (px 30)
-        ]
+tiles : Board -> List Tile
+tiles board =
+    List.filterMap sequenceSnd (Array.toIndexedList board)
 
 
-styles : List Mixin -> Attribute a
-styles =
-    Attributes.style << Css.asPairs
+sequenceSnd : ( a, Maybe b ) -> Maybe ( a, b )
+sequenceSnd tup =
+    case snd tup of
+        Just b ->
+            Just ( fst tup, b )
+
+        Nothing ->
+            Nothing
