@@ -1,7 +1,6 @@
 module Main exposing (main)
 
 import Array exposing (Array)
-import Array.Extra as Array
 import Css
     exposing
         ( Mixin
@@ -40,8 +39,7 @@ import Css
         , width
         )
 import Dict exposing (Dict)
-import Html exposing (Attribute, Html, div, h1, h2, text)
-import Html.App exposing (program)
+import Html exposing (Attribute, Html, div, h1, h2, program, text)
 import Html.Attributes as Attributes
 import Keyboard
 import List.Extra as List
@@ -51,8 +49,7 @@ import Platform.Sub as Sub
 import Random exposing (Generator)
 import Random.Array as Random
 import Random.Extra as Random
-import Tuple2
-import Tuple3
+import Tuple
 
 
 type alias Model =
@@ -90,7 +87,7 @@ type Msg
     | KeyDown KeyCode
 
 
-main : Program Never
+main : Program Never Model Msg
 main =
     program
         { init = init
@@ -148,7 +145,7 @@ withTiles : Board -> List Tile -> Board
 withTiles board newTiles =
     case newTiles of
         head :: tail ->
-            withTiles (Array.set (fst head) (Just (snd head)) board) tail
+            withTiles (Array.set (Tuple.first head) (Just (Tuple.second head)) board) tail
 
         [] ->
             board
@@ -209,10 +206,10 @@ slideLeft model =
             Array.map slideRowLeft (groupArr 4 model.board)
 
         newBoard =
-            concatArr (Array.map fst slideRes)
+            concatArr (Array.map Tuple.first slideRes)
 
         deltaScore =
-            Array.foldl (+) 0 (Array.map snd slideRes)
+            Array.foldl (+) 0 (Array.map Tuple.second slideRes)
     in
         { board = newBoard, score = model.score + deltaScore }
 
@@ -220,39 +217,26 @@ slideLeft model =
 slideRowLeft : Array (Maybe Value) -> ( Array (Maybe Value), Score )
 slideRowLeft row =
     let
-        acc =
+        ( tmpRow, deltaScore, prevValue ) =
             Array.foldl reduceRow ( Array.empty, 0, Nothing ) row
 
         newRow =
-            Array.resizelRepeat 4 Nothing (Tuple3.fst acc)
-
-        deltaScore =
-            Tuple3.snd acc
+            resizelRepeat 4 Nothing tmpRow
     in
         ( newRow, deltaScore )
 
 
 reduceRow : Maybe Value -> ( Array (Maybe Value), Score, Maybe Value ) -> ( Array (Maybe Value), Score, Maybe Value )
-reduceRow value acc =
-    let
-        row =
-            Tuple3.fst acc
+reduceRow value ( row, deltaScore, prevValue ) =
+    case value of
+        Just v ->
+            if value == prevValue then
+                ( Array.set ((Array.length row) - 1) (Just (2 * v)) row, deltaScore + 2 * v, Nothing )
+            else
+                ( Array.push value row, deltaScore, value )
 
-        deltaScore =
-            Tuple3.snd acc
-
-        prevValue =
-            Tuple3.trd acc
-    in
-        case value of
-            Just v ->
-                if value == prevValue then
-                    ( Array.set ((Array.length row) - 1) (Just (2 * v)) row, deltaScore + 2 * v, Nothing )
-                else
-                    ( Array.push value row, deltaScore, value )
-
-            Nothing ->
-                ( row, deltaScore, prevValue )
+        Nothing ->
+            ( row, deltaScore, prevValue )
 
 
 groupArr : Int -> Array a -> Array (Array a)
@@ -264,7 +248,7 @@ groupArr groupSize arr =
         group groupNo =
             Array.slice (groupNo * groupSize) ((groupNo + 1) * groupSize) arr
     in
-        Array.map group (Array.fromList [0..(numGroups - 1)])
+        Array.map group (Array.fromList (List.range 0 (numGroups - 1)))
 
 
 concatArr : Array (Array a) -> Array a
@@ -311,18 +295,18 @@ newTilesGen numTiles board =
 
 emptyIndexes : Board -> List Index
 emptyIndexes board =
-    List.map fst (List.filter (((==) Nothing) << snd) (Array.toIndexedList board))
+    List.map Tuple.first (List.filter (((==) Nothing) << Tuple.second) (Array.toIndexedList board))
 
 
 chooseNGen : Int -> List a -> Generator (List a)
 chooseNGen num list =
-    Random.map fst (chooseNGen_ num (Array.fromList list))
+    Random.map Tuple.first (chooseNGen_ num (Array.fromList list))
 
 
 chooseNGen_ : Int -> Array a -> Generator ( List a, Array a )
 chooseNGen_ num arr =
     if num > 0 then
-        Random.andThen (Random.choose arr) (chooseNGen__ (num - 1))
+        Random.andThen (chooseNGen__ (num - 1)) (Random.choose arr)
     else
         Random.constant ( [], arr )
 
@@ -332,12 +316,12 @@ chooseNGen__ num headRes =
     let
         -- Create generator for the rest of the elements
         nextGen =
-            chooseNGen_ num (snd headRes)
+            chooseNGen_ num (Tuple.second headRes)
     in
-        case fst headRes of
+        case Tuple.first headRes of
             Just a ->
                 -- Cons the generated value with the rest
-                Random.map (Tuple2.mapFst ((::) a)) nextGen
+                Random.map (Tuple.mapFirst ((::) a)) nextGen
 
             Nothing ->
                 nextGen
@@ -466,10 +450,10 @@ tileView tile =
             [ height (px 100)
             , width (px 100)
             , position absolute
-            , tileTransform (fst tile)
+            , tileTransform (Tuple.first tile)
             ]
         ]
-        [ tileValueView (snd tile) ]
+        [ tileValueView (Tuple.second tile) ]
 
 
 tileTransform : Int -> Mixin
@@ -605,9 +589,23 @@ tiles board =
 
 sequenceSnd : ( a, Maybe b ) -> Maybe ( a, b )
 sequenceSnd tup =
-    case snd tup of
+    case Tuple.second tup of
         Just b ->
-            Just ( fst tup, b )
+            Just ( Tuple.first tup, b )
 
         Nothing ->
             Nothing
+
+
+resizelRepeat : Int -> a -> Array a -> Array a
+resizelRepeat n val xs =
+    let
+        l =
+            Array.length xs
+    in
+        if l > n then
+            Array.slice 0 n xs
+        else if l < n then
+            Array.append xs (Array.repeat (n - l) val)
+        else
+            xs
